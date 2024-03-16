@@ -6,11 +6,13 @@ interface Room {
 	user1: User;
 	user2: User;
 }
+
 export class RoomManager {
 	private rooms: Map<string, Room>;
 	constructor() {
 		this.rooms = new Map<string, Room>();
 	}
+
 	createRoom(user1: User, user2: User) {
 		const roomId = this.generate().toString();
 		this.rooms.set(roomId, { user1, user2 });
@@ -36,6 +38,7 @@ export class RoomManager {
 		const user1 = this.rooms.get(roomId)?.user1;
 		user1?.socket.emit("answer", {
 			sdp,
+			roomId,
 		});
 	}
 

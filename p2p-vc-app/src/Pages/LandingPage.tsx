@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const LandingPage: React.FC = () => {
 	const [name, setName] = useState<string>("");
+	const [joined, setJoined] = useState(false);
 	const navigate = useNavigate();
+
+	useEffect(() => {}, []);
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
