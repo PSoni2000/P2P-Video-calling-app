@@ -1,143 +1,174 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Socket, io } from "socket.io-client";
+import { io } from "socket.io-client";
 
 const URL: string = "http://localhost:3000";
-
+declare global {
+	interface Window {
+		pcr: RTCPeerConnection;
+	}
+}
 const RoomPage: React.FC<{
 	name: string;
 	localVideoTrack: MediaStreamTrack | null;
 	localAudioTrack: MediaStreamTrack | null;
 }> = ({ name, localVideoTrack, localAudioTrack }) => {
 	const [lobby, setLobby] = useState<boolean>(true);
-	const [socket, setSocket] = useState<null | Socket>(null);
 	const [sendingPc, setSendingPc] = useState<null | RTCPeerConnection>(null);
 	const [receivingPc, setReceivingPc] = useState<null | RTCPeerConnection>(
 		null
 	);
-	const [remoteVideoTrack, setRemoteVideoTrack] =
-		useState<MediaStreamTrack | null>(null);
-	const [remoteAudioTrack, setRemoteAudioTrack] =
-		useState<MediaStreamTrack | null>(null);
-	const [remoteMediaStream, setRemoteMediaStream] =
-		useState<MediaStream | null>(null);
-	const remoteVideoRef = useRef<HTMLVideoElement>();
-	const localVideoRef = useRef<HTMLVideoElement>();
+	const remoteVideoRef = useRef<HTMLVideoElement>(null);
+	const localVideoRef = useRef<HTMLVideoElement>(null);
 
 	useEffect(() => {
-		const socket = io(URL);
-		socket.on("send-offer", async ({ roomId }) => {
-			setLobby(false);
-			const pc = new RTCPeerConnection();
+		try {
+			const socket = io(URL);
+			// Handle connection errors
+			socket.on("connect_error", (error: Error) => {
+				console.error(`Socket connection error: ${error.message}`);
+			});
 
-			setSendingPc(pc);
-			if (localVideoTrack) {
-				pc.addTrack(localVideoTrack);
-			}
-			if (localAudioTrack) {
-				pc.addTrack(localAudioTrack);
-			}
+			// Handle connection timeout
+			socket.on("connect_timeout", () => {
+				console.error("Socket connection timeout");
+			});
 
-			pc.onicecandidate = async (e) => {
-				// receiving ice candidate locally
-				if (e.candidate) {
-					socket.emit("add-ice-candidate", {
-						candidate: e.candidate,
-						type: "sender",
+			// Handle reconnection errors
+			socket.on("reconnect_error", (error: Error) => {
+				console.error(`Socket reconnection error: ${error.message}`);
+			});
+
+			// Handle reconnection failure
+			socket.on("reconnect_failed", () => {
+				console.error("Socket reconnection failed");
+			});
+
+			socket.on("send-offer", async ({ roomId }) => {
+				// sending offer
+				setLobby(false);
+				const pc = new RTCPeerConnection();
+				setSendingPc(pc);
+				if (localVideoTrack) {
+					// added tack
+					pc.addTrack(localVideoTrack);
+				}
+				if (localAudioTrack) {
+					// added tack
+					pc.addTrack(localAudioTrack);
+				}
+
+				pc.onicecandidate = async (e: RTCPeerConnectionIceEvent) => {
+					// receiving ice candidate locally
+					if (e.candidate) {
+						socket.emit("add-ice-candidate", {
+							candidate: e.candidate,
+							type: "sender",
+							roomId,
+						});
+					}
+				};
+
+				pc.onnegotiationneeded = async () => {
+					// on negotiation needed, sending offer
+					const sdp = await pc.createOffer();
+					pc.setLocalDescription(new RTCSessionDescription(sdp));
+					socket.emit("offer", {
+						sdp,
 						roomId,
 					});
-				}
-			};
+				};
+			});
 
-			pc.onnegotiationneeded = async () => {
-				// on negotiation neeeded, sending offer
-				const sdp = await pc.createOffer();
-				pc.setLocalDescription(sdp);
-				socket.emit("offer", {
-					sdp,
+			socket.on("offer", async ({ roomId, sdp: remoteSdp }) => {
+				// received offer
+				setLobby(false);
+				const pc = new RTCPeerConnection();
+
+				const stream = new MediaStream();
+				if (remoteVideoRef.current) {
+					remoteVideoRef.current.srcObject = stream;
+				}
+				// trickle ice
+				setReceivingPc(pc);
+				window.pcr = pc;
+
+				pc.ontrack = (e: RTCTrackEvent) => {
+					const { track, type } = e;
+					if (type == "audio") {
+						if (remoteVideoRef.current && remoteVideoRef.current.srcObject)
+							// @ts-ignore
+							remoteVideoRef.current.srcObject.addTrack(track);
+					} else {
+						if (remoteVideoRef.current && remoteVideoRef.current.srcObject)
+							// @ts-ignore
+							remoteVideoRef.current.srcObject.addTrack(track);
+					}
+
+					remoteVideoRef?.current?.play();
+				};
+
+				pc.onicecandidate = async (e) => {
+					if (!e.candidate) return;
+					// ice candidate on receiving side
+					if (e.candidate) {
+						socket.emit("add-ice-candidate", {
+							candidate: e.candidate,
+							type: "receiver",
+							roomId,
+						});
+					}
+				};
+
+				await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
+				const sdp = await pc.createAnswer();
+
+				await pc.setLocalDescription(sdp);
+
+				socket.emit("answer", {
 					roomId,
+					sdp: sdp,
 				});
-			};
-		});
-
-		socket.on("offer", async ({ roomId, sdp: remoteSdp }) => {
-			// received offer
-			setLobby(false);
-			const pc = new RTCPeerConnection();
-
-			const stream = new MediaStream();
-			if (remoteVideoRef.current) {
-				remoteVideoRef.current.srcObject = stream;
-			}
-
-			setRemoteMediaStream(stream);
-			// trickle ice
-			setReceivingPc(pc);
-			//FIXME: window.pcr = pc;
-			pc.ontrack = (e) => {
-				const { track, type } = e;
-				if (type == "audio") {
-					setRemoteAudioTrack(track);
-					// @ts-ignore
-					remoteVideoRef.current.srcObject.addTrack(track);
-				} else {
-					setRemoteVideoTrack(track);
-					// @ts-ignore
-					remoteVideoRef.current.srcObject.addTrack(track);
-				}
-				//@ts-ignore
-				remoteVideoRef.current.play();
-			};
-
-			pc.onicecandidate = async (e) => {
-				if (!e.candidate) return;
-				// ice candidate on receiving side
-				if (e.candidate) {
-					socket.emit("add-ice-candidate", {
-						candidate: e.candidate,
-						type: "receiver",
-						roomId,
-					});
-				}
-			};
-
-			await pc.setRemoteDescription(remoteSdp);
-			const sdp = await pc.createAnswer();
-
-			await pc.setLocalDescription(sdp);
-
-			socket.emit("answer", {
-				roomId,
-				sdp: sdp,
 			});
-		});
 
-		socket.on("answer", ({ roomId, sdp: remoteSdp }) => {
-			setLobby(false);
-			setSendingPc((pc) => {
-				pc?.setRemoteDescription(remoteSdp);
-				return pc;
-			});
-		});
-
-		socket.on("lobby", () => {
-			setLobby(true);
-		});
-
-		socket.on("add-ice-candidate", ({ candidate, type }) => {
-			if (type == "sender") {
-				setReceivingPc((pc) => {
-					pc?.addIceCandidate(candidate);
-					return pc;
-				});
-			} else {
+			socket.on("answer", ({ roomId, sdp: remoteSdp }) => {
+				setLobby(false);
 				setSendingPc((pc) => {
-					pc?.addIceCandidate(candidate);
+					pc?.setRemoteDescription(new RTCSessionDescription(remoteSdp));
 					return pc;
 				});
-			}
-		});
+				console.log("loop closed");
+			});
 
-		setSocket(socket);
+			socket.on("lobby", () => {
+				setLobby(true);
+			});
+
+			socket.on(
+				"add-ice-candidate",
+				({ candidate, type }: { candidate: RTCIceCandidate; type: string }) => {
+					// add ice candidate from remote
+					if (type == "sender") {
+						setReceivingPc((pc) => {
+							if (!pc) {
+								console.error("receiving pc not found");
+							}
+							pc?.addIceCandidate(candidate);
+							return pc;
+						});
+					} else {
+						setSendingPc((pc) => {
+							if (!pc) {
+								console.error("sending pc not found");
+							}
+							pc?.addIceCandidate(candidate);
+							return pc;
+						});
+					}
+				}
+			);
+		} catch (error) {
+			console.error(`Error:${JSON.stringify(error)}`);
+		}
 	}, [name]);
 
 	useEffect(() => {
