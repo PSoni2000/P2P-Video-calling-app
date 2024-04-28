@@ -37,9 +37,6 @@ const LandingPage: React.FC = () => {
 		e.preventDefault();
 
 		setJoined(true);
-
-		//TODO: join room logic
-		console.log("join clicked", name);
 	};
 
 	if (!joined) {

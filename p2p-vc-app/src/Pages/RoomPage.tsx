@@ -13,10 +13,8 @@ const RoomPage: React.FC<{
 	localAudioTrack: MediaStreamTrack | null;
 }> = ({ name, localVideoTrack, localAudioTrack }) => {
 	const [lobby, setLobby] = useState<boolean>(true);
-	const [sendingPc, setSendingPc] = useState<null | RTCPeerConnection>(null);
-	const [receivingPc, setReceivingPc] = useState<null | RTCPeerConnection>(
-		null
-	);
+	const sendingPcRef = useRef<null | RTCPeerConnection>(null);
+	const receivingPcRef = useRef<null | RTCPeerConnection>(null);
 	const remoteVideoRef = useRef<HTMLVideoElement>(null);
 	const localVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -47,7 +45,7 @@ const RoomPage: React.FC<{
 				// sending offer
 				setLobby(false);
 				const pc = new RTCPeerConnection();
-				setSendingPc(pc);
+				sendingPcRef.current = pc;
 				if (localVideoTrack) {
 					// added tack
 					pc.addTrack(localVideoTrack);
@@ -89,7 +87,7 @@ const RoomPage: React.FC<{
 					remoteVideoRef.current.srcObject = stream;
 				}
 				// trickle ice
-				setReceivingPc(pc);
+				receivingPcRef.current = pc;
 				window.pcr = pc;
 
 				pc.ontrack = (e: RTCTrackEvent) => {
@@ -130,13 +128,11 @@ const RoomPage: React.FC<{
 				});
 			});
 
-			socket.on("answer", ({ roomId, sdp: remoteSdp }) => {
+			socket.on("answer", ({ sdp: remoteSdp }) => {
 				setLobby(false);
-				setSendingPc((pc) => {
-					pc?.setRemoteDescription(new RTCSessionDescription(remoteSdp));
-					return pc;
-				});
-				console.log("loop closed");
+				sendingPcRef.current?.setRemoteDescription(
+					new RTCSessionDescription(remoteSdp)
+				);
 			});
 
 			socket.on("lobby", () => {
@@ -148,21 +144,15 @@ const RoomPage: React.FC<{
 				({ candidate, type }: { candidate: RTCIceCandidate; type: string }) => {
 					// add ice candidate from remote
 					if (type == "sender") {
-						setReceivingPc((pc) => {
-							if (!pc) {
-								console.error("receiving pc not found");
-							}
-							pc?.addIceCandidate(candidate);
-							return pc;
-						});
+						if (!receivingPcRef.current) {
+							console.error("receiving pc not found");
+						}
+						receivingPcRef.current?.addIceCandidate(candidate);
 					} else {
-						setSendingPc((pc) => {
-							if (!pc) {
-								console.error("sending pc not found");
-							}
-							pc?.addIceCandidate(candidate);
-							return pc;
-						});
+						if (!sendingPcRef.current) {
+							console.error("sending pc not found");
+						}
+						sendingPcRef.current?.addIceCandidate(candidate);
 					}
 				}
 			);

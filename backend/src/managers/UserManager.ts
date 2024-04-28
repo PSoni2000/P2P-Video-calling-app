@@ -42,7 +42,6 @@ export class UserManager {
 
 		const id1 = this.queue.pop();
 		const id2 = this.queue.pop();
-		console.log("id is " + id1 + " " + id2);
 		const user1 = this.users.find((x) => x.socket.id === id1);
 		const user2 = this.users.find((x) => x.socket.id === id2);
 
