@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
 import { Socket, io } from "socket.io-client";
 
 const URL: string = "http://localhost:3000";
 
-const RoomPage: React.FC = () => {
-	const params = useParams();
+const RoomPage: React.FC<{
+	name: string;
+	localVideoTrack: MediaStreamTrack | null;
+	localAudioTrack: MediaStreamTrack | null;
+}> = ({ name, localVideoTrack, localAudioTrack }) => {
 	const [lobby, setLobby] = useState<boolean>(true);
 	const [socket, setSocket] = useState<null | Socket>(null);
 	const [sendingPc, setSendingPc] = useState<null | RTCPeerConnection>(null);
@@ -14,12 +16,12 @@ const RoomPage: React.FC = () => {
 	);
 	const [remoteVideoTrack, setRemoteVideoTrack] =
 		useState<MediaStreamTrack | null>(null);
-	const [localVideoTracck, setlocalVideoTracck] =
-		useState<MediaStreamTrack | null>(null);
 	const [remoteAudioTrack, setRemoteAudioTrack] =
 		useState<MediaStreamTrack | null>(null);
-	const [localAudioTrack, setLocalAudioTrack] =
-		useState<MediaStreamTrack | null>(null);
+	const [remoteMediaStream, setRemoteMediaStream] =
+		useState<MediaStream | null>(null);
+	const remoteVideoRef = useRef<HTMLVideoElement>();
+	const localVideoRef = useRef<HTMLVideoElement>();
 
 	useEffect(() => {
 		const socket = io(URL);
@@ -27,34 +29,78 @@ const RoomPage: React.FC = () => {
 			setLobby(false);
 			const pc = new RTCPeerConnection();
 			setSendingPc(pc);
+			if (localVideoTrack) {
+				pc.addTrack(localVideoTrack);
+			}
+			if (localAudioTrack) {
+				pc.addTrack(localAudioTrack);
+			}
 
-			const sdp = await pc.createOffer();
-			socket.emit("offer", { sdp, roomId });
-		});
-		socket.on("offer", async ({ offer, roomId }) => {
-			setLobby(false);
-			const pc = new RTCPeerConnection();
-
-			const sdp = await pc.createAnswer();
-
-			// trickle ice
-			setReceivingPc(pc);
-			pc.ontrack = ({ track, type }) => {
-				if (type == "audio") {
-					setRemoteAudioTrack(track);
-				} else {
-					setRemoteVideoTrack(track);
+			pc.onicecandidate = async (e) => {
+				if (e.candidate) {
+					socket.emit("add-ice-candidate", {
+						candidate: e.candidate,
+						type: "sender",
+					});
 				}
 			};
-			socket.emit("answer", { sdp, roomId });
+
+			pc.onnegotiationneeded = async () => {
+				const sdp = await pc.createOffer();
+				pc.setLocalDescription(sdp);
+				socket.emit("offer", {
+					sdp,
+					roomId,
+				});
+			};
 		});
-		socket.on("answer", ({ roomId, answer }) => {
+
+		socket.on("offer", async ({ roomId, sdp: remoteSdp }) => {
+			setLobby(false);
+			const pc = new RTCPeerConnection();
+			pc.setRemoteDescription(remoteSdp);
+			const sdp = await pc.createAnswer();
+			pc.setLocalDescription(sdp);
+			const stream = new MediaStream();
+			if (remoteVideoRef.current) {
+				remoteVideoRef.current.srcObject = stream;
+			}
+			setRemoteMediaStream(stream);
+			// trickle ice
+			setReceivingPc(pc);
+
+			pc.onicecandidate = async (e) => {
+				if (e.candidate) {
+					socket.emit("add-ice-candidate", {
+						candidate: e.candidate,
+						type: "receiver",
+					});
+				}
+			};
+
+			pc.ontrack = ({ track, type }) => {
+				if (type == "audio") {
+					// setRemoteAudioTrack(track);
+					// @ts-ignore
+					remoteVideoRef.current.srcObject.addTrack(track);
+				} else {
+					// setRemoteVideoTrack(track);
+					// @ts-ignore
+					remoteVideoRef.current.srcObject.addTrack(track);
+				}
+				//@ts-ignore
+				remoteVideoRef.current.play();
+			};
+			socket.emit("answer", {
+				roomId,
+				sdp: sdp,
+			});
+		});
+
+		socket.on("answer", ({ roomId, sdp: remoteSdp }) => {
 			setLobby(false);
 			setSendingPc((pc) => {
-				pc?.setRemoteDescription({
-					type: "answer",
-					sdp: answer,
-				});
+				pc?.setRemoteDescription(remoteSdp);
 				return pc;
 			});
 		});
@@ -62,17 +108,37 @@ const RoomPage: React.FC = () => {
 			setLobby(true);
 		});
 
-		setSocket(socket);
-	}, [params.name]);
+		socket.on("add-ice-candidate", ({ candidate, type }) => {
+			if (type == "sender") {
+				setReceivingPc((pc) => {
+					pc?.addIceCandidate(candidate);
+					return pc;
+				});
+			} else {
+				setSendingPc((pc) => {
+					pc?.addIceCandidate(candidate);
+					return pc;
+				});
+			}
+		});
 
-	if (lobby) {
-		return <div>Waiting to connect you with someone...</div>;
-	}
+		setSocket(socket);
+	}, [name]);
+
+	useEffect(() => {
+		if (localVideoRef.current) {
+			if (localVideoTrack) {
+				localVideoRef.current.srcObject = new MediaStream([localVideoTrack]);
+				localVideoRef.current.play();
+			}
+		}
+	}, [localVideoRef]);
 	return (
 		<div>
-			Hi : {params.userName}
-			<video width={400} height={400} />
-			<video width={400} height={400} />
+			Hi {name}
+			<video autoPlay width={400} height={400} ref={localVideoRef} />
+			{lobby ? "Waiting to connect you to someone" : null}
+			<video autoPlay width={400} height={400} ref={remoteVideoRef} />
 		</div>
 	);
 };

@@ -6,6 +6,11 @@
 	height: 100vh;
 	width: 100vw;
 }
+.user-details__video {
+	height: 50vh;
+	border: 1px solid black;
+	border-radius: 20px;
+}
 .user-details__name {
 	margin: 20px;
 }
