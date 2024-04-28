@@ -28,6 +28,7 @@ const RoomPage: React.FC<{
 		socket.on("send-offer", async ({ roomId }) => {
 			setLobby(false);
 			const pc = new RTCPeerConnection();
+
 			setSendingPc(pc);
 			if (localVideoTrack) {
 				pc.addTrack(localVideoTrack);
@@ -37,15 +38,18 @@ const RoomPage: React.FC<{
 			}
 
 			pc.onicecandidate = async (e) => {
+				// receiving ice candidate locally
 				if (e.candidate) {
 					socket.emit("add-ice-candidate", {
 						candidate: e.candidate,
 						type: "sender",
+						roomId,
 					});
 				}
 			};
 
 			pc.onnegotiationneeded = async () => {
+				// on negotiation neeeded, sending offer
 				const sdp = await pc.createOffer();
 				pc.setLocalDescription(sdp);
 				socket.emit("offer", {
@@ -56,41 +60,51 @@ const RoomPage: React.FC<{
 		});
 
 		socket.on("offer", async ({ roomId, sdp: remoteSdp }) => {
+			// received offer
 			setLobby(false);
 			const pc = new RTCPeerConnection();
-			pc.setRemoteDescription(remoteSdp);
-			const sdp = await pc.createAnswer();
-			pc.setLocalDescription(sdp);
+
 			const stream = new MediaStream();
 			if (remoteVideoRef.current) {
 				remoteVideoRef.current.srcObject = stream;
 			}
+
 			setRemoteMediaStream(stream);
 			// trickle ice
 			setReceivingPc(pc);
-
-			pc.onicecandidate = async (e) => {
-				if (e.candidate) {
-					socket.emit("add-ice-candidate", {
-						candidate: e.candidate,
-						type: "receiver",
-					});
-				}
-			};
-
-			pc.ontrack = ({ track, type }) => {
+			//FIXME: window.pcr = pc;
+			pc.ontrack = (e) => {
+				const { track, type } = e;
 				if (type == "audio") {
-					// setRemoteAudioTrack(track);
+					setRemoteAudioTrack(track);
 					// @ts-ignore
 					remoteVideoRef.current.srcObject.addTrack(track);
 				} else {
-					// setRemoteVideoTrack(track);
+					setRemoteVideoTrack(track);
 					// @ts-ignore
 					remoteVideoRef.current.srcObject.addTrack(track);
 				}
 				//@ts-ignore
 				remoteVideoRef.current.play();
 			};
+
+			pc.onicecandidate = async (e) => {
+				if (!e.candidate) return;
+				// ice candidate on receiving side
+				if (e.candidate) {
+					socket.emit("add-ice-candidate", {
+						candidate: e.candidate,
+						type: "receiver",
+						roomId,
+					});
+				}
+			};
+
+			await pc.setRemoteDescription(remoteSdp);
+			const sdp = await pc.createAnswer();
+
+			await pc.setLocalDescription(sdp);
+
 			socket.emit("answer", {
 				roomId,
 				sdp: sdp,
@@ -104,6 +118,7 @@ const RoomPage: React.FC<{
 				return pc;
 			});
 		});
+
 		socket.on("lobby", () => {
 			setLobby(true);
 		});
@@ -133,6 +148,7 @@ const RoomPage: React.FC<{
 			}
 		}
 	}, [localVideoRef]);
+
 	return (
 		<div>
 			Hi {name}
