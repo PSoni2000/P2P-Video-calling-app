@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import RoomPage from "./RoomPage";
+import Room from "../Components/Room";
+import SideBar from "../Components/SideBar";
 
 const LandingPage: React.FC = () => {
 	const [name, setName] = useState<string>("");
@@ -39,35 +40,42 @@ const LandingPage: React.FC = () => {
 		setJoined(true);
 	};
 
-	if (!joined) {
-		return (
-			<>
-				<form onSubmit={handleSubmit} className="user-details">
-					<video autoPlay className="user-details__video" ref={videoRef} />
-					<div className="user-details__name">
-						<label htmlFor="Name">Name</label>
-						<input
-							type="text"
-							id="Name"
-							value={name}
-							required
-							onChange={(e) => {
-								setName(e.target.value);
-							}}
-						/>
-					</div>
-					<button type="submit">Join</button>
-				</form>
-			</>
-		);
-	}
-
 	return (
-		<RoomPage
-			name={name}
-			localAudioTrack={localAudioTrack}
-			localVideoTrack={localVideoTrack}
-		/>
+		<div className="home-page">
+			<SideBar />
+			{joined ? (
+				<Room
+					name={name}
+					localAudioTrack={localAudioTrack}
+					localVideoTrack={localVideoTrack}
+				/>
+			) : (
+				<div className="container">
+					<div className="header">Landing Page Header</div>
+					<div className="content">
+						<div className="video-stream">
+							<video autoPlay className="user-video" ref={videoRef} />
+							<form onSubmit={handleSubmit} className="user-details">
+								<div className="user-details__name">
+									<label htmlFor="Name">Name</label>
+									<input
+										type="text"
+										id="Name"
+										value={name}
+										required
+										onChange={(e) => {
+											setName(e.target.value);
+										}}
+									/>
+								</div>
+								<button type="submit">Join</button>
+							</form>
+						</div>
+						<div className="chat">Coming soon</div>
+					</div>
+				</div>
+			)}
+		</div>
 	);
 };
 

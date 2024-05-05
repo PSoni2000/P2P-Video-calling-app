@@ -1,15 +1,71 @@
+.home-page {
+	display: grid;
+	height: 100vh;
+	grid-template-columns: 20% auto;
+}
+
+/* side bar styles */
+.side-bar {
+	background-color: bisque;
+}
+.side-bar-logo {
+	margin: 40px;
+	font-size: x-large;
+	font-weight: bolder;
+	text-align: center;
+}
+.side-bar-room-history {
+	margin-left: 20px;
+	text-align: center;
+}
+
+/* landing page styles */
+.container {
+	height: 100vh;
+}
+.header {
+	padding: 20px;
+	height: 70px;
+}
+.content {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	height: 90%;
+}
+.video-stream {
+	display: flex;
+	flex: auto;
+	flex-direction: column;
+	align-items: center;
+}
+.chat {
+	width: 30%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: center;
+	border: 1px solid black;
+}
 .user-details {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	flex-direction: column;
-	height: 100vh;
-	width: 100vw;
+	margin: 20px 40px;
+
+	height: 40%;
+	width: 70%;
+	border: 1px solid black;
 }
-.user-details__video {
-	height: 50vh;
+.user-video {
+	object-fit: cover;
+	height: 40%;
+	width: 70%;
 	border: 1px solid black;
 	border-radius: 20px;
+	margin: 20px 40px;
 }
 .user-details__name {
 	margin: 20px;

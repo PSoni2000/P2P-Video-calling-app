@@ -7,7 +7,7 @@ declare global {
 		pcr: RTCPeerConnection;
 	}
 }
-const RoomPage: React.FC<{
+const Room: React.FC<{
 	name: string;
 	localVideoTrack: MediaStreamTrack | null;
 	localAudioTrack: MediaStreamTrack | null;
@@ -171,13 +171,21 @@ const RoomPage: React.FC<{
 	}, [localVideoRef]);
 
 	return (
-		<div>
-			Hi {name}
-			<video autoPlay width={400} height={400} ref={localVideoRef} />
-			{lobby ? "Waiting to connect you to someone" : null}
-			<video autoPlay width={400} height={400} ref={remoteVideoRef} />
+		<div className="container">
+			<div className="header">Hi {name}</div>
+			<div className="content">
+				<div className="video-stream">
+					<video className="user-video" ref={localVideoRef} />
+					{lobby ? (
+						"Waiting to connect you to someone"
+					) : (
+						<video className="user-video" ref={remoteVideoRef} />
+					)}
+				</div>
+				<div className="chat">Coming soon</div>
+			</div>
 		</div>
 	);
 };
 
-export default RoomPage;
+export default Room;
